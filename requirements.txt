@@ -1,0 +1,25 @@
+# requirements.txt — Python Dependencies
+# ========================================
+# Website Health Monitoring System
+#
+# Install all dependencies:
+#   pip install -r requirements.txt
+#
+# Why pin versions (requests==2.31.0)?
+#   Unpinned 'pip install requests' installs the latest version.
+#   New versions can introduce breaking changes.
+#   Pinned versions ensure reproducible builds across every developer
+#   machine, CI/CD pipeline, and Docker container.
+#   This is a core DevOps practice.
+#
+# Regenerate this file from your current environment:
+#   pip freeze > requirements.txt
+
+# HTTP client — used by monitor.py to send health check requests
+requests==2.31.0
+
+# Flask — lightweight Python web framework for the REST API (Phase 5)
+Flask==3.0.3
+
+# Werkzeug — WSGI utilities (Flask dependency, pinned to prevent conflicts)
+Werkzeug==3.0.3

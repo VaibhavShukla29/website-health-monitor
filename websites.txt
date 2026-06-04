@@ -1,0 +1,48 @@
+# websites.txt — URL Monitoring Configuration
+# =============================================
+# Website Health Monitoring System
+#
+# Rules:
+#   - One URL per line
+#   - Full URL required: https://example.com (not just example.com)
+#   - Lines starting with # are comments (ignored)
+#   - Empty lines are ignored
+#
+# Add / remove sites freely — no code changes needed.
+
+# ── Real production sites ──────────────────────────────────────────────────
+https://google.com
+https://github.com
+https://stackoverflow.com
+https://python.org
+https://cloudflare.com
+
+# ── httpbin.org — free HTTP testing service ────────────────────────────────
+# These endpoints let you simulate every scenario without needing a broken site.
+
+# Always returns HTTP 200 — simulates a healthy website
+https://httpbin.org/status/200
+
+# Always returns HTTP 404 — SERVER IS UP, just no page at this path
+# Your monitor reports this as: UP | 404
+# Teaches the UP/DOWN distinction (UP = infrastructure alive)
+https://httpbin.org/status/404
+
+# Always returns HTTP 500 — application error, but server is responding
+# Your monitor reports this as: UP | 500
+https://httpbin.org/status/500
+
+# Delays response by 3 seconds — tests slow website detection
+# You should see "Slow" in the performance column
+https://httpbin.org/delay/3
+
+# ── Failure scenario tests ──────────────────────────────────────────────────
+
+# Non-existent domain — triggers DNS failure / ConnectionError
+# Your monitor reports this as: DOWN | Connection Failed (DNS / network)
+https://this-website-does-not-exist-xyz-abc-999.com
+
+# ── Your own sites (uncomment and replace) ─────────────────────────────────
+# https://your-app.com
+# https://api.your-company.com
+# https://staging.your-app.com

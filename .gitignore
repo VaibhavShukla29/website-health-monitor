@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# Environment variables (NEVER commit secrets to Git)
+.env
+.env.local
+.env.production
+
+# Logs (auto-generated — don't commit monitoring history)
+logs.txt
+*.log
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Docker
+.docker/
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Screenshots (too large for Git — use Git LFS if needed)
+screenshots/*.png
+screenshots/*.jpg

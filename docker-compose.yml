@@ -1,0 +1,79 @@
+# =============================================================================
+# docker-compose.yml — Website Health Monitoring System
+# =============================================================================
+#
+# Docker Compose orchestrates multi-container apps from a single YAML file.
+# For this single-service project it adds:
+#   • Volume mounting  (edit websites.txt locally, container sees changes)
+#   • Log persistence  (logs.txt survives container restarts)
+#   • Easy environment variable management
+#   • One-command startup/teardown
+#
+# Commands:
+#   docker-compose up --build     Build image and start container
+#   docker-compose up -d          Start in background (detached)
+#   docker-compose logs -f        Follow live container logs
+#   docker-compose down           Stop and remove container
+#   docker-compose restart        Restart the service
+#
+# Access the API after startup:
+#   curl http://localhost:5000/health
+#   curl http://localhost:5000/metrics
+#   curl http://localhost:5000/websites
+#   curl http://localhost:5000/logs
+# =============================================================================
+
+version: '3.8'
+
+services:
+  health-monitor:
+    # Build from the Dockerfile in the current directory
+    build: .
+
+    # Container name for easy reference in docker ps / docker logs
+    container_name: website-health-monitor
+
+    # Port mapping: <host_port>:<container_port>
+    # Access the API at http://localhost:5000 on your machine
+    ports:
+      - "5000:5000"
+
+    # ── Volume mounts ──────────────────────────────────────────────────────
+    # Bind mounts synchronise files between host and container.
+    #
+    # websites.txt:
+    #   Edit the URL list on your host machine without rebuilding the image.
+    #   The container reads the file at its path (/app/websites.txt).
+    #
+    # logs.txt:
+    #   Log entries written inside the container are visible on your host.
+    #   Survives 'docker-compose down' and container restarts.
+    volumes:
+      - ./websites.txt:/app/websites.txt
+      - ./logs.txt:/app/logs.txt
+
+    # ── Environment variables ──────────────────────────────────────────────
+    # Override any ENV defined in the Dockerfile.
+    # These can also be loaded from a .env file:
+    #   MONITOR_INTERVAL=30 in .env → automatically picked up
+    environment:
+      - MONITOR_INTERVAL=60     # Check interval in seconds
+      - WEBSITES_FILE=websites.txt
+      - FLASK_DEBUG=false
+      - PORT=5000
+
+    # ── Restart policy ─────────────────────────────────────────────────────
+    # unless-stopped: auto-restart on crash or system reboot
+    #                 but NOT if you manually ran 'docker-compose down'
+    # Other options: no | always | on-failure
+    restart: unless-stopped
+
+    # ── Health check ───────────────────────────────────────────────────────
+    # Docker Compose exposes this in 'docker-compose ps' as Health status.
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
