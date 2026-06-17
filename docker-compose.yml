@@ -1,79 +1,158 @@
 # =============================================================================
-# docker-compose.yml — Website Health Monitoring System
+# docker-compose.yml — Website Health Monitoring System v2.0
 # =============================================================================
 #
-# Docker Compose orchestrates multi-container apps from a single YAML file.
-# For this single-service project it adds:
-#   • Volume mounting  (edit websites.txt locally, container sees changes)
-#   • Log persistence  (logs.txt survives container restarts)
-#   • Easy environment variable management
-#   • One-command startup/teardown
+# Services:
+#   mysql           — MySQL 8.0 database server
+#   health-monitor  — Python Flask monitoring application
 #
-# Commands:
-#   docker-compose up --build     Build image and start container
-#   docker-compose up -d          Start in background (detached)
-#   docker-compose logs -f        Follow live container logs
-#   docker-compose down           Stop and remove container
-#   docker-compose restart        Restart the service
+# Start everything:
+#   docker-compose up --build
 #
-# Access the API after startup:
-#   curl http://localhost:5000/health
-#   curl http://localhost:5000/metrics
-#   curl http://localhost:5000/websites
-#   curl http://localhost:5000/logs
+# Start in background:
+#   docker-compose up -d --build
+#
+# View logs:
+#   docker-compose logs -f
+#   docker-compose logs -f health-monitor
+#   docker-compose logs -f mysql
+#
+# Stop everything:
+#   docker-compose down
+#
+# Stop and delete all data (including MySQL database):
+#   docker-compose down -v
+#
+# Access MySQL directly:
+#   docker exec -it health-monitor-db mysql -u monitor_user -p health_monitor
 # =============================================================================
 
-version: '3.8'
 
 services:
-  health-monitor:
-    # Build from the Dockerfile in the current directory
-    build: .
 
-    # Container name for easy reference in docker ps / docker logs
+  # ---------------------------------------------------------------------------
+  # SERVICE 1: MySQL 8.0 Database
+  # ---------------------------------------------------------------------------
+  # Why MySQL 8.0?
+  #   Stable LTS version. Used in AWS RDS, Google Cloud SQL, Azure Database.
+  #   The same version you would use in any cloud deployment.
+  #
+  # How schema.sql is applied automatically:
+  #   Files in /docker-entrypoint-initdb.d/ run once on FIRST container start.
+  #   If you delete the mysql_data volume and restart, it runs again.
+  #   If the volume already has data, it is skipped.
+  # ---------------------------------------------------------------------------
+
+  mysql:
+    image: mysql:8.0
+    container_name: health-monitor-db
+
+    environment:
+      # Root password — used for admin access only
+      MYSQL_ROOT_PASSWORD: rootpassword123
+
+      # Database name (must match DB_NAME in health-monitor service)
+      MYSQL_DATABASE: health_monitor
+
+      # Application user — health-monitor connects with these credentials
+      MYSQL_USER: monitor_user
+      MYSQL_PASSWORD: monitor_pass
+
+    ports:
+      # Expose MySQL port to your host machine
+      # Lets you connect from MySQL Workbench, DBeaver, or terminal
+      # Format: <host_port>:<container_port>
+      - "3306:3306"
+
+    volumes:
+      # Named volume: persists MySQL data across container restarts
+      # Without this, all data is lost every time you run docker-compose down
+      - mysql_data:/var/lib/mysql
+
+      # Mount schema.sql as an init script
+      # Runs automatically on first start to create tables
+      - ./schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+
+    # Health check: Docker waits for MySQL to be ready before
+    # starting health-monitor. Prevents "connection refused" errors
+    # during app startup when MySQL is still initialising.
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u", "monitor_user", "--password=monitor_pass"]
+      interval: 10s      # Check every 10 seconds
+      timeout:  5s       # Give up after 5 seconds
+      retries:  5        # Mark unhealthy after 5 failures
+      start_period: 30s  # Wait 30s before first check (MySQL init time)
+
+    restart: unless-stopped
+
+
+  # ---------------------------------------------------------------------------
+  # SERVICE 2: Website Health Monitor (Flask Application)
+  # ---------------------------------------------------------------------------
+  # depends_on with condition: service_healthy means this service only
+  # starts AFTER MySQL passes its health check above.
+  # This prevents the app from crashing on startup because MySQL
+  # is not ready yet — a very common beginner Docker mistake.
+  # ---------------------------------------------------------------------------
+
+  health-monitor:
+    build: .
     container_name: website-health-monitor
 
-    # Port mapping: <host_port>:<container_port>
-    # Access the API at http://localhost:5000 on your machine
     ports:
       - "5000:5000"
 
-    # ── Volume mounts ──────────────────────────────────────────────────────
-    # Bind mounts synchronise files between host and container.
-    #
-    # websites.txt:
-    #   Edit the URL list on your host machine without rebuilding the image.
-    #   The container reads the file at its path (/app/websites.txt).
-    #
-    # logs.txt:
-    #   Log entries written inside the container are visible on your host.
-    #   Survives 'docker-compose down' and container restarts.
     volumes:
+      # Sync websites.txt from your host — edit locally, container sees changes
       - ./websites.txt:/app/websites.txt
+      # Persist logs.txt to host — survives container restarts
       - ./logs.txt:/app/logs.txt
 
-    # ── Environment variables ──────────────────────────────────────────────
-    # Override any ENV defined in the Dockerfile.
-    # These can also be loaded from a .env file:
-    #   MONITOR_INTERVAL=30 in .env → automatically picked up
     environment:
-      - MONITOR_INTERVAL=60     # Check interval in seconds
-      - WEBSITES_FILE=websites.txt
-      - FLASK_DEBUG=false
-      - PORT=5000
+      # ── Monitoring configuration ──────────────────────────────────────────
+      MONITOR_INTERVAL: "60"
+      WEBSITES_FILE: "websites.txt"
+      PORT: "5000"
+      FLASK_DEBUG: "false"
 
-    # ── Restart policy ─────────────────────────────────────────────────────
-    # unless-stopped: auto-restart on crash or system reboot
-    #                 but NOT if you manually ran 'docker-compose down'
-    # Other options: no | always | on-failure
+      # ── Database configuration ────────────────────────────────────────────
+      # DB_ENABLED=true activates MySQL storage
+      DB_ENABLED: "true"
+
+      # IMPORTANT: Use 'mysql' here (the service name above), NOT localhost
+      # Inside Docker network, containers talk to each other by service name
+      DB_HOST: "mysql"
+      DB_PORT: "3306"
+      DB_NAME: "health_monitor"
+      DB_USER: "monitor_user"
+      DB_PASSWORD: "monitor_pass"
+
+    # Only start health-monitor after MySQL is healthy
+    # condition: service_healthy requires the healthcheck above to pass
+    depends_on:
+      mysql:
+        condition: service_healthy
+
     restart: unless-stopped
 
-    # ── Health check ───────────────────────────────────────────────────────
-    # Docker Compose exposes this in 'docker-compose ps' as Health status.
     healthcheck:
       test: ["CMD", "python", "-c",
              "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+      timeout:  10s
+      retries:  3
+      start_period: 20s
+
+
+# =============================================================================
+# NAMED VOLUMES
+# =============================================================================
+# Named volumes are managed by Docker — they persist outside containers.
+# mysql_data stores the actual MySQL database files.
+# It survives docker-compose down but is removed by docker-compose down -v
+# =============================================================================
+
+volumes:
+  mysql_data:
+    driver: local
